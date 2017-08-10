@@ -1,0 +1,16 @@
+seeds:
+  seed1:
+    caches: [merisyvyys_cache]
+    coverages: [alldata]
+    grids: [etrstm35fin]
+#    levels:
+#      from: 7
+#      to: 7
+    refresh_before:
+      weeks: 1
+
+coverages:
+  alldata:
+    bbox: [62000,6606000,732911,7776460]
+    srs: 'EPSG:3067'
+

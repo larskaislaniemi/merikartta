@@ -1,0 +1,263 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 100 100
+%%BeginProlog
+% define scale, 1 cm = 28.34645 (72 dpi)
+/s 28.34645 def
+% define unit, 1 unit = radius of the inside of the location marker
+/u 4 def
+/um {u mul} def
+% some more constants
+/pi 3.1415926536 def
+/deg 180 pi div def
+/rad pi 180 div def
+/mp { 25 u mul } def
+/xmin 0 def
+/xmax {2 mp mul} def 
+/ymin 0 def
+/ymax {2 mp mul} def
+/rmp {mp add} def
+
+/linecapbutt 0 def
+/linecaprounded 1 def
+/linecapsquare 2 def
+
+/linejoinmitered 0 def
+/linejoinrounded 1 def
+/linejoinbeveled 2 def
+
+% some opers:
+/dupcoord { dup 3 2 roll dup 4 1 roll exch} def
+
+/mk_colBase { 0 0 0 } def
+/mk_colAnnotation { 0 1 0 } def
+/mk_colAlert { 1 0 0 } def
+
+/mk_matrixSkew [0.75 0 0.25 1 0 0] def
+/mk_matrixNorm [1 0 0 1 0 0] def
+
+/mk_locationSymbol {
+	% arguments: x, y, r
+	3	1	roll
+	dupcoord
+	5	4	roll  % x y x y r
+	dup
+	6	1	roll  % r x y x y r
+			0	360	arc % NB first three arguments are supposed to be already in stack
+	moveto
+	dup
+	-2 mul	0	rmoveto
+	4 mul	0	rlineto
+
+} def
+
+/mk_upTriangleSmallSymbol {
+	newpath
+	moveto
+	4 um	0	rlineto
+	-4 um	60 sin  8 um mul	rlineto
+	-4 um	60 sin -8 um mul	rlineto
+	4 um	0	rlineto
+	closepath
+} def
+
+/mk_rectSmallSymbol {
+	newpath
+	moveto
+	3 um	0	rlineto
+	0	8 um	rlineto
+	-6 um	0	rlineto
+	0 	-8 um	rlineto
+	3 um	0	rlineto
+	closepath
+} def
+
+/mk_downTriangleSymbol {
+	newpath
+	moveto
+	5 um	60 sin 10 um mul	rlineto
+	-10 um	0	rlineto
+	5 um	60 sin -10 um mul	rlineto
+	closepath
+} def
+
+/mk_upTriangleSymbol {
+	newpath
+	moveto
+	5 um	0	rlineto
+	-5 um	60 sin 10 um mul	rlineto
+	-5 um	60 sin -10 um mul	rlineto
+	5 um	0	rlineto
+	closepath
+} def
+
+/mk_circleSymbol {
+	1.25 um	setlinewidth
+	newpath
+	5 um add % add to y coord
+			5 um	0	360	arc
+	closepath
+} def
+
+/mk_poleSymbol {
+	1.25 um	setlinewidth
+	newpath
+	moveto
+	0 um	5 um	rlineto
+	closepath
+} def
+
+/mk_crossSymbol {
+	1.25 um	setlinewidth
+	1	setlinecap
+	1	setlinejoin
+	newpath
+	moveto
+	0	mk_crossHeight -0.25 mul	rmoveto
+	5 um	0	rmoveto
+	-10 um	10 um	rlineto
+	0	-10 um	rmoveto
+	10 um	10 um rlineto
+	closepath
+} def
+
+/mk_triangleHeight {
+	60 sin 10 um mul 0.3 um add
+} def
+
+/mk_circleHeight {
+	10 um 0.3 um add
+} def
+
+/mk_poleHeight {
+	5 um 0.3 um add
+} def
+
+/mk_crossHeight {
+	10 um 0.3 um add
+} def
+
+/mk_symbolName (noSymbol) def
+%%EndProlog
+
+0.5 um	setlinewidth
+1	setlinecap
+0	setlinejoin
+
+% clipping path
+newpath                                                                         
+xmin	ymin	moveto    % keep this going CCW!
+xmin	ymax	lineto
+xmax	ymax	lineto
+xmax	ymin	lineto
+xmin	ymin	lineto
+0 rmp	0 rmp	1 um	0	360	arc
+closepath
+clip
+
+% draw location symbol
+newpath
+mk_colBase	setrgbcolor
+0 rmp	0 rmp	1.25 um	mk_locationSymbol
+stroke
+
+/mk_symType {MKSymbol 100 div cvi 10 mod} def
+/mk_symClass {MKSymbol 10000 div cvi 100 mod} def
+
+mk_symClass 10 eq mk_symClass 9 eq mk_symClass 7 eq or or {
+	MKSymbol 2 mod 0 eq { /mk_matrix mk_matrixNorm def } { /mk_matrix mk_matrixSkew def } ifelse
+
+	mk_symType 1 ge mk_symType 9 le and {
+		/mk_symbolName (unknown 7-9-10 / 3..6) def
+		
+		mk_symType 1 eq {
+			/mk_symbolName (green) def
+			/mk_symbolHeight {mk_poleHeight} def
+			/mk_cardinalLower {mk_poleSymbol stroke} def
+			/mk_cardinalUpper {mk_upTriangleSmallSymbol fill} def
+		} if
+
+		mk_symType 2 eq {
+			/mk_symbolName (red) def
+			/mk_symbolHeight {mk_poleHeight} def
+			/mk_cardinalLower {mk_poleSymbol stroke} def
+			/mk_cardinalUpper {mk_rectSmallSymbol stroke} def
+		} if
+
+		mk_symType 3 eq {
+			/mk_symbolName (north) def
+			/mk_symbolHeight {mk_triangleHeight} def
+			/mk_cardinalLower {mk_upTriangleSymbol fill} def
+			/mk_cardinalUpper {mk_upTriangleSymbol fill} def
+		} if
+
+		mk_symType 4 eq {
+			/mk_symbolName (south) def
+			/mk_symbolHeight {mk_triangleHeight} def
+			/mk_cardinalLower {mk_downTriangleSymbol fill} def
+			/mk_cardinalUpper {mk_downTriangleSymbol fill} def
+		} if
+
+		mk_symType 5 eq {
+			/mk_symbolName (east) def
+			/mk_symbolHeight {mk_triangleHeight} def
+			/mk_cardinalLower {mk_upTriangleSymbol fill} def
+			/mk_cardinalUpper {mk_downTriangleSymbol fill} def
+		} if
+
+		mk_symType 6 eq {
+			/mk_symbolName (west) def
+			/mk_symbolHeight {mk_triangleHeight} def
+			/mk_cardinalLower {mk_downTriangleSymbol fill} def
+			/mk_cardinalUpper {mk_upTriangleSymbol fill} def
+		} if
+		
+		mk_symType 7 eq {
+			/mk_symbolName (danger) def
+			/mk_symbolHeight {mk_circleHeight} def
+			/mk_cardinalLower {mk_circleSymbol fill} def
+			/mk_cardinalUpper {mk_circleSymbol fill} def
+		} if
+
+		mk_symType 8 eq {
+			/mk_symbolName (safe) def
+			/mk_symbolHeight {mk_poleHeight} def
+			/mk_cardinalLower {mk_poleSymbol stroke} def
+			/mk_cardinalUpper {mk_circleSymbol stroke} def
+		} if
+
+		mk_symType 9 eq {
+			/mk_symbolName (special) def
+			/mk_symbolHeight {mk_poleHeight} def
+			/mk_cardinalLower {mk_poleSymbol stroke} def
+			/mk_cardinalUpper {mk_crossSymbol stroke} def
+		} if
+
+		gsave
+		mk_matrix concat
+		% draw lower symbol
+		mk_colBase	setrgbcolor
+		0 rmp	0 rmp	mk_cardinalLower
+
+		% draw second triangle
+		mk_colBase	setrgbcolor
+		0 rmp	0 rmp mk_symbolHeight add mk_cardinalUpper 
+		grestore
+	}
+	{
+		/mk_symbolName (unknown 7-9-10) def
+	} ifelse
+} 
+{
+	/mk_symbolName (unknown) def
+} ifelse
+
+%/Times-Roman findfont
+%4 um scalefont
+%setfont
+%
+%newpath
+%mk_colAnnotation	setrgbcolor
+%xmin 1 um add	ymin 1 um add 	moveto
+%mk_symbolName	show
+showpage
+%%EOF

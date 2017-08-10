@@ -1,0 +1,98 @@
+# -------------------------------
+# MapProxy example configuration.
+# -------------------------------
+#
+# This is a minimal MapProxy configuration.
+# See full_example.yaml and the documentation for more options.
+#
+
+# Starts the following services:
+# Demo:
+#     http://localhost:8080/demo
+# WMS:
+#     capabilities: http://localhost:8080/service?REQUEST=GetCapabilities
+# WMTS:
+#     capabilities: http://localhost:8080/wmts/1.0.0/WMTSCapabilities.xml
+#     first tile: http://localhost:8080/wmts/osm/webmercator/0/0/0.png
+# Tile service (compatible with OSM/etc.)
+#     first tile: http://localhost:8080/tiles/osm/webmercator/0/0/0.png
+# TMS:
+#     note: TMS is not compatible with OSM/Google Maps/etc.
+#     fist tile: http://localhost:8080/tms/1.0.0/osm/webmercator/0/0/0.png
+# KML:
+#     initial doc: http://localhost:8080/kml/osm/webmercator
+
+services:
+  demo:
+  tms:
+  kml:
+  wmts:
+  wms:
+    md:
+      title: Merisyvyys WMS
+      abstract: 'None'
+    srs: ['EPSG:3067']
+    bbox_srs: ['EPSG:3067']
+    image_formats: ['image/png']
+
+
+layers:
+  - name: merisyvyys
+    title: Merisyvyys
+    sources: [merisyvyys_cache]
+#  - name: merikartta_s050
+#    title: Merikartta 1/50000
+#    sources: [merikartta_s050_cache]
+#  - name: merikartta_s100
+#    title: Merikartta 1/100000
+#    sources: [merikartta_s100_cache]
+
+caches:
+  merisyvyys_cache:
+    grids: [etrstm35fin]
+    sources: [merisyvyys]
+    cache:
+      type: file
+#  merikartta_s050_cache:
+#    grids: [etrstm35fin]
+#    sources: [merikartta_s050]
+#    cache:
+#      type: file
+#  merikartta_s025_cache:
+#    grids: [etrstm35fin]
+#    sources: [merikartta_s025]
+#    cache:
+#      type: file
+
+sources:
+  merisyvyys:
+    coverage: 
+      bbox: [62000,6606000,732911,7776460]
+      srs: 'EPSG:3067'
+    type: mapnik
+    mapfile: ../map_style.xml
+    layers: [layerSyvyyskayra, layerSyvyysalue, layerMaaalue]
+#  merikartta_s050:
+#    coverage: 
+#      bbox: [62000,6606000,732911,7776460]
+#      srs: 'EPSG:3067'
+#    type: mapnik
+#    mapfile: ../map_style.xml
+#    layers: [layerSyvyyskayra, layerSyvyysalue, layerMaaalue]
+#    scale_factor: 0.5
+#  merikartta_s100:
+#    coverage: 
+#      bbox: [62000,6606000,732911,7776460]
+#      srs: 'EPSG:3067'
+#    type: mapnik
+#    mapfile: ../map_style.xml
+#    layers: [layerSyvyyskayra, layerSyvyysalue, layerMaaalue]
+#    scale_factor: 0.25
+
+
+grids:
+    etrstm35fin:
+      srs: 'EPSG:3067'
+      bbox: [62000,6606000,732911,7776460]
+
+globals:

@@ -1,0 +1,1161 @@
+<html>
+<head>
+	<title>Merikartta</title>
+	<link rel="stylesheet" href="https://openlayers.org/en/v4.2.0/css/ol.css" type="text/css">
+	<link rel="stylesheet" href="lib/walkermatt/ol3-layerswitcher/ol3-layerswitcher.css" type="text/css">
+	<script src="https://openlayers.org/en/v4.2.0/build/ol-debug.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.4.3/proj4.js"></script>
+	<script src="https://epsg.io/3067.js"></script>
+	<script src="lib/walkermatt/ol3-layerswitcher/ol3-layerswitcher.js"></script>
+
+	<style>
+		.shallowDepthControlButton {
+	  		top: 70px;
+			left: .5em;
+		}
+
+		.gridEnabledControlButton {
+			top: 110px;
+			left: .5em;
+		}
+
+		.mousePositionControl {
+			background-color: rgba(255,255,255,0.5);
+			top: 20px;
+			right: 20px;
+		}
+
+		.interactionModeControlButton {
+			top: 70px;
+			left: .5em;
+		}
+
+		.infoOverlay {
+			overflow-y: auto;
+			overflow-x: hidden;
+			background-color: rgba(255,255,255,0.5);
+			font: 10px sans-serif;
+			border: solid black 1px;
+		}
+
+		.overlayHeader {
+			font-weight: bold;
+			text-decoration: underline;
+		}
+	</style>
+</head>
+
+<body>
+
+<script>
+
+var DEFAULT_EPSG = '4326';
+var MAP_EPSG = '3067';
+
+var GLOBALOPTIONS = {
+	shallowWater: 0
+};
+
+Number.prototype.pad = function(size) {
+	var s = String(this);
+	while (s.length < (size || 2)) {s = "0" + s;}
+	return s;
+}
+
+var featureToSymbolLabel = function(feature, featuretype) {
+	var symbollabel = "000000";
+
+	if (featuretype == "turvalaite") {
+		var ty_jnr = Number(feature.get("ty_jnr"));
+		var subtype = feature.get("subtype");
+		var navl_tyyp = Number(feature.get("navl_tyyp"));
+		if (subtype == "KELLUVA") {
+			subtype = 1;
+		} else {
+			subtype = 0;
+		}
+
+		if (ty_jnr == 10 || ty_jnr == 9 || ty_jnr == 7) {
+			symbollabel = ty_jnr.pad(2) + navl_tyyp.pad(2) + subtype.pad(2);
+		} else {
+			// not yet drawn
+			symbollabel = "000000";
+		}
+	}
+
+	return symbollabel;
+};
+
+var featureInfoToHTML = function(featjsonarr) {
+	var el_div = document.createElement("div");
+
+	for (var i = 0; i < featjsonarr.length; i++) {
+		var el_head = document.createElement("p");
+		el_head.className = "overlayHeader";
+		el_head.innerHTML = featjsonarr[i].name;
+		el_div.appendChild(el_head);
+		var el_list = document.createElement("dl");
+		for (var key in featjsonarr[i].properties) {
+			var el_listitem = document.createElement("dt");
+			el_listitem.innerHTML = key;
+			var el_listdef = document.createElement("dd");
+			el_listdef.innerHTML = featjsonarr[i].properties[key];
+			el_list.appendChild(el_listitem);
+			el_list.appendChild(el_listdef);
+		}
+		el_div.appendChild(el_list);
+	}
+
+	return el_div;
+};
+
+// FUNCTIONS TO GENERATE DATA SOURCE URLS
+
+var generateLVUrlFnc = function(ns, layer, epsg) {
+	epsgCode = epsg || DEFAULT_EPSG;
+	return function(extent) {
+		var url = 'http://meri.kaislaniemi.net/wfs/lv/' +
+			ns + '?version=1.1.0&request=GetFeature&typename=' +
+			ns + ':' + layer + '&outputFormat=application/json&' +
+			'srsname=EPSG:' + epsgCode + '&bbox=' +
+			extent.join(',') + ',EPSG:' + epsgCode;
+		return url;
+	}
+};
+
+var generateMeriWFSUrlFnc = function(ns, layer, epsg) {
+	epsgCode = epsg || DEFAULT_EPSG;
+	return function(extent) {
+		var url = 'http://meri.kaislaniemi.net/cgi-bin/tinyows?service=WFS&' +
+			'version=1.1.0&request=GetFeature&typename=' +
+			ns + ':' + layer + '&outputFormat=application/json&' +
+			'srsname=EPSG:' + epsgCode + '&bbox=' +
+			extent.join(',') + ',EPSG:' + epsgCode;
+		return url;
+	}
+};
+
+
+var generateNauticalWarningsURLFnc = function(ns, layer, epsg) {
+	return function(extent) {
+		return 'https://meri.digitraffic.fi/api/v1/nautical-warnings/published';
+	}
+};
+
+
+// NAUTICAL WARNINGS LAYER COMPONENTS
+
+var nauticalWarningsPoint = new ol.style.Circle({
+	radius: 5,
+	fill: null,
+	stroke: new ol.style.Stroke({color: 'red', width: 2})
+});
+
+var nauticalWarningsStyles = {
+	'Point': new ol.style.Style({
+		image: nauticalWarningsPoint
+	}),
+	'LineString': new ol.style.Style({
+		stroke: new ol.style.Stroke({
+			color: 'red',
+			width: 2
+		})
+	}),
+	'Polygon': new ol.style.Style({
+		stroke: new ol.style.Stroke({
+			color: 'blue',
+			lineDash: [4],
+			width: 3
+		}),
+		fill: new ol.style.Fill({
+			color: 'rgba(0, 0, 255, 0.1)'
+		})
+	}),
+	///'Circle': new ol.style.Style({
+	///	stroke: new ol.style.Stroke({
+	///		color: 'red',
+	///		width: 2
+	///	}),
+	///	fill: new ol.style.Fill({
+	///		color: 'rgba(255,0,0,0.2)'
+	///	})
+	///})
+};
+
+
+// GRATICULE COMPONENTS
+
+var createGraticule = function(map) {
+	var LL = 0;
+	var UL = 1;
+	var LR = 2;
+	var UR = 3;
+	var LON = 0;
+	var LAT = 1;
+
+	var gratjson = {
+		type: "FeatureCollection",
+		features: []
+	};
+
+	if (!map) return gratjson;
+
+	var center = map.getView().getCenter();
+	var extent = [
+		center[0] - 0.5 * map.getSize()[0] * map.getView().getResolution(),
+		center[1] - 0.5 * map.getSize()[1] * map.getView().getResolution(),
+		center[0] + 0.5 * map.getSize()[0] * map.getView().getResolution(),
+		center[1] + 0.5 * map.getSize()[1] * map.getView().getResolution()
+	];
+
+	var cornersorig = [
+		[extent[0], extent[1]],  // lower left
+		[extent[0], extent[3]],  // upper left
+		[extent[2], extent[1]],  // lower right
+		[extent[2], extent[3]]   // upper right
+	];
+
+	var sideReso = [
+		map.getSize()[0] / (cornersorig[3][0]-cornersorig[1][0]), // reso at upper boundary
+		map.getSize()[1] / (cornersorig[3][1]-cornersorig[2][1])  // reso at right boundary
+	];
+
+	var corners4326 = [];
+
+	for (var i = 0; i < 4; i++) {
+		corners4326.push(ol.proj.transform(cornersorig[i], map.getView().getProjection(), 'EPSG:4326'));
+	}
+
+	var pointList4326 = [
+		[], // left bnd
+		[], // upper
+		[], // right
+		[]  // lower
+	];
+	var pointListOrig = [
+		[], // left bnd
+		[], // upper
+		[], // right
+		[]  // lower
+	];
+
+	var minlon4326 = Math.min(corners4326[LL][LON], corners4326[UL][LON]);
+	var maxlon4326 = Math.max(corners4326[LR][LON], corners4326[UR][LON]);
+	var minlat4326 = Math.min(corners4326[LR][LAT], corners4326[LL][LAT]);
+	var maxlat4326 = Math.max(corners4326[UR][LAT], corners4326[UL][LAT]);
+
+	// RIGHT BND
+	for (var lat = 60.0*Math.floor(minlat4326); lat < 60.0*Math.ceil(maxlat4326); lat++) {
+		var rellat = (lat/60.0 - corners4326[LR][LAT]) / (corners4326[UR][LAT] - corners4326[LR][LAT]);
+		var lon4326 = corners4326[LR][LON] + rellat * (corners4326[UR][LON] - corners4326[LR][LON]);
+		var point4326 = [lon4326, lat/60.0];
+		var pointorig = ol.proj.transform(point4326, 'EPSG:4326', map.getView().getProjection());
+		pointorig[LON] = cornersorig[LR][LON] + rellat * (cornersorig[UR][LON] - cornersorig[LR][LON]);
+		pointListOrig[2].push(pointorig);
+		pointList4326[2].push(point4326);
+	}
+
+	// LEFT BND
+	for (var lat = 60.0*Math.floor(minlat4326); lat < 60.0*Math.ceil(maxlat4326); lat++) {
+		var rellat = (lat/60.0 - corners4326[LL][LAT]) / (corners4326[UL][LAT] - corners4326[LL][LAT]);
+		var lon4326 = corners4326[LL][LON] + rellat * (corners4326[UL][LON] - corners4326[LL][LON]);
+		var point4326 = [lon4326, lat/60.0];
+		var pointorig = ol.proj.transform(point4326, 'EPSG:4326', map.getView().getProjection());
+		pointorig[LON] = cornersorig[LL][LON] + rellat * (cornersorig[UL][LON] - cornersorig[LL][LON]);
+		pointListOrig[0].push(pointorig);
+		pointList4326[0].push(point4326);
+	}
+
+	// UPPER BND
+	for (var lon = 60.0*Math.floor(minlon4326); lon < 60.0*Math.ceil(maxlon4326); lon++) {
+		var rellon = (lon/60.0 - corners4326[UL][LON]) / (corners4326[UR][LON] - corners4326[UL][LON]);
+		var lat4326 = corners4326[UL][LAT] + rellon * (corners4326[UR][LAT] - corners4326[UL][LAT]);
+		var point4326 = [lon/60.0, lat4326];
+		var pointorig = ol.proj.transform(point4326, 'EPSG:4326', map.getView().getProjection());
+		pointorig[LAT] = cornersorig[UL][LAT] + rellon * (cornersorig[UR][LAT] - cornersorig[UL][LAT]);
+		pointListOrig[1].push(pointorig);
+		pointList4326[1].push(point4326);
+	}
+
+	// LOWER BND
+	for (var lon = 60.0*Math.floor(minlon4326); lon < 60.0*Math.ceil(maxlon4326); lon++) {
+		var rellon = (lon/60.0 - corners4326[LL][LON]) / (corners4326[LR][LON] - corners4326[LL][LON]);
+		var lat4326 = corners4326[LL][LAT] + rellon * (corners4326[LR][LAT] - corners4326[LL][LAT]);
+		var point4326 = [lon/60.0, lat4326];
+		var pointorig = ol.proj.transform(point4326, 'EPSG:4326', map.getView().getProjection());
+		pointorig[LAT] = cornersorig[LL][LAT] + rellon * (cornersorig[LR][LAT] - cornersorig[LL][LAT]);
+		pointListOrig[3].push(pointorig);
+		pointList4326[3].push(point4326);
+	}
+
+	for (var i = 0; i < 2; i++) {
+		for (var j = 0; j < pointListOrig[i].length; j++) {
+			var typevalue = "";
+			var dirvalue = "";
+			var labelindex = 0;
+
+			if (i == 0) {
+				dirvalue = "lat";
+				labelindex = LAT;
+			} else {
+				dirvalue = "lon";
+				labelindex = LON;
+			}
+
+			if (Math.abs(pointList4326[i][j][labelindex] - Math.floor(pointList4326[i][j][labelindex])) < 0.001) {
+				typevalue = "deg";
+			} else {
+				typevalue = "min";
+			}
+
+			var coordline = {
+				type: "Feature",
+				geometry: {
+					type: "LineString",
+					coordinates: [
+						pointListOrig[i][j],
+						pointListOrig[i+2][j]
+					]
+				},
+				properties: { 
+					type: typevalue,
+					dir: dirvalue,
+					label: Math.floor(pointList4326[i][j][labelindex]).toString() + "d" +
+						(Math.round(6000.0*(pointList4326[i][j][labelindex]-Math.floor(pointList4326[i][j][labelindex])))/100.0).toString() +
+						"'",
+					sizeInDir: 0.0 // TODO: calculate needed offset to align in middle... (pointListOrig[i+2][j][i]-pointListOrig[i][j][i]) * sideReso[i]
+				}
+			};
+			gratjson.features.push(coordline);
+		}
+	}
+
+	var format = new ol.format.GeoJSON();
+	var features = format.readFeatures(gratjson, {
+		dataProjection: map.getView().getProjection(),
+		featureProjection: map.getView().getProjection()
+	});
+
+	return features;
+};
+
+// LAYER STORAGE
+
+var layers = [
+	// GRATICULE
+	{
+		name: 'graticule',
+		enabled: true,
+		attribution: '',
+		type: 'dyngeojson',
+		featurefnc: createGraticule,
+		olSource: null,
+		olLayer: null,
+		allowVisibilityChange: true,
+		olStyle: function(feature, resolution) {
+			var linetype = feature.get("type");
+			var linedir = feature.get("dir");
+			var width = 1.0;
+			var colour = 'rgba(0,0,0,0.5)';
+			var align = "left";
+			var rotation = 0;
+			var baseline = "middle";
+			var offsetx, offsety;
+			var fontsize = 10;
+			var font = '10px sans-serif';
+
+			if (linetype == "deg") {
+				width = 1.0;
+			} else if (linetype == "min") {
+				width = 0.5;
+			}
+
+			if (linedir == "lon") {
+				align = "start";
+				rotation = 0;
+				baseline = "ideographic";
+				offsetx = feature.get("sizeInDir"); //0.0;
+				offsety = -map.getSize()[1]/2.0+fontsize;
+			} else if (linedir == "lat") {
+				align = "right";
+				rotation = -3.1415926536/2.0;
+				baseline = "middle";
+				offsetx = map.getSize()[0]/2.0-fontsize;
+				offsety = feature.get("sizeInDir"); //0.0
+			}
+			
+			var textStyle = new ol.style.Text({
+				textAlign: "center",
+				textBaseline: "middle",
+				text: feature.get("label"),
+				rotation: rotation,
+				offsetX: offsetx,
+				offsetY: offsety,
+				font: font
+			})
+
+			var strokeStyle = new ol.style.Stroke({
+				color: colour,
+				width: width
+			});
+
+			return new ol.style.Style({
+				text: textStyle,
+				stroke: strokeStyle,
+			});
+		},
+		zIndex: 1000,
+		init: false
+	},
+	// BACKGROUND
+	{
+		name: 'background',
+		enabled: true,
+		attribution: '',
+		allowVisibilityChange: false,
+		type: 'wkt',
+		wkt: 'POLYGON((35 80, 15 80, 15 50, 35 50, 35 80))',
+		dataProjection: '4326',
+		olSource: null,
+		olLayer: null,
+		olStyle: new ol.style.Style({
+			fill: new ol.style.Fill({
+				//color: 'rgba(248,238,201,1.0)'
+				color: 'rgba(255,0,0,1.0)'
+			}),
+			stroke: null
+		}),
+		overlaps: false,
+		zIndex: 0,
+		init: false
+	},
+	// WARNINGS
+	{
+		name: 'nautical-warnings',
+		enabled: true,
+		attribution: 'Liikennevirasto',
+		allowVisibilityChange: true,
+		type: 'wfs',
+		urlfncgen: generateNauticalWarningsURLFnc,
+		ns: '',
+		layername: '',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		loadingStrategy: ol.loadingstrategy.all,
+		olStyle: function(feature, resolution) {
+			return nauticalWarningsStyles[feature.getGeometry().getType()];
+		},
+		zIndex: 999,
+		init: false
+	},
+	// SYVYYSKARTTA
+	{	name: 'syvyyskartta',
+		enabled: true,
+		type: 'wms',
+		allowVisibilityChange: true,
+		url: 'http://meri.kaislaniemi.net:81/service',
+		attribution: 'Liikennevirasto',
+		extent: [62000, 6606000, 732911, 7776460],
+		projection: MAP_EPSG,
+		layername: 'merisyvyys',
+		olSource: null,
+		olLayer: null,
+		minResolution: 0,
+		maxResolution: 30,
+		zIndex: 1,
+	},
+	// LV RAJOITETTU SYVYYSPISTE
+	{	name: 'syvyyspiste',
+		enabled: true,
+		type: 'wfs',
+		allowVisibilityChange: true,
+		urlfncgen: generateMeriWFSUrlFnc, 
+		ns: 'meri',
+		layername: 'syvyyspiste',
+		attribution: 'Liikennevirasto',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		renderBuffer: 300,
+		olStyle: function(feature, resolution) {
+			var dvalfloor = Math.floor(feature.get('depth'));
+			var dvaldec = Math.floor(10.0 * (feature.get('depth') - dvalfloor));
+			var dvaldec_char;
+			var color = 'rgba(0,0,0,1.0)';
+
+			if (dvaldec == 0) {
+				dvaldec_char = '';
+			} else {
+				dvaldec_char = String.fromCharCode(dvaldec.toString().charCodeAt(0) + 8320 - 48);
+			}
+
+			if (feature.get('typesound') == 10) {
+				color = 'rgba(255,0,0,1.0)';
+			}
+
+			var dvalstr = dvalfloor.toString() + dvaldec_char;
+
+			return new ol.style.Style({
+				geometry: feature.getGeometry(),
+				text: new ol.style.Text({
+					text: dvalstr,
+					font: '13px Courier New',
+					textAlign: 'center',
+					textBaseline: 'middle',
+				}),
+				stroke: new ol.style.Stroke({
+					color: color,
+					width: 2
+				})
+			});
+		},
+		zIndex: 3,
+		overlaps: false,
+		init: false
+	},
+	// LV AVOIN RANTARAKENTEET
+	{	name: 'rantarakenteet',
+		enabled: true,
+		type: 'wfs',
+		allowVisibilityChange: true,
+		urlfncgen: generateMeriWFSUrlFnc,
+		ns: 'meri',
+		layername: 'rantarakenteet',
+		attribution: 'Liikennevirasto',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		olStyle: new ol.style.Style({
+			stroke: new ol.style.Stroke({
+				color: 'rgba(0,0,0,1.0)',
+				width: 1
+			})
+		}),
+		zIndex: 4,
+		overlaps: true,
+		init: false
+	},
+	// LV AVOIN VÄYLÄ-ALUE
+	{	name: 'vaylaalueet',
+		enabled: true,
+		type: 'wfs',
+		allowVisibilityChange: true,
+		urlfncgen: generateMeriWFSUrlFnc,
+		ns: 'meri',
+		layername: 'vaylaalueet',
+		attribution: 'Liikennevirasto',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		olStyle: function(feature, resolution) {
+			if (feature.get('vayalue_sy') >= 9) {
+				return new ol.style.Style({
+					fill: new ol.style.Fill({
+						color: 'rgba(245,206,255,0.4)',
+					stroke: null
+					})
+				});
+			} else {
+				return new ol.style.Style({
+					fill: null //new ol.style.Fill({
+						//color: 'rgba(0,0,0,0.0)',
+					//})
+				});
+			}
+		},
+		zIndex: 2,
+		overlaps: true,
+		init: false
+	},
+	// LV AVOIN TAULULINJA
+	{	name: 'taululinja',
+		enabled: true,
+		type: 'wfs',
+		allowVisibilityChange: true,
+		urlfncgen: generateMeriWFSUrlFnc,
+		ns: 'meri',
+		layername: 'taululinja',
+		attribution: 'Liikennevirasto',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		olStyle: function(feature, resolution) {
+			return new ol.style.Style({
+				stroke: new ol.style.Stroke({
+					color: 'rgba(0,0,0,1.0)',
+					lineDash: [8, 10],
+					width: 0.3
+				}),
+			});
+		},
+		zIndex: 5,
+		overlaps: true,
+		init: false
+	},
+	// LV AVOIN NAVIGOINTILINJA
+	{	name: 'navigointilinjat',
+		enabled: true,
+		type: 'wfs',
+		allowVisibilityChange: true,
+		urlfncgen: generateMeriWFSUrlFnc,
+		ns: 'meri',
+		layername: 'navigointilinjat',
+		attribution: 'Liikennevirasto',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		olStyle: function(feature, resolution) {
+			var textStyle = null;
+			var depthStr = feature.get('navlin_syv');
+			depthStr = Math.floor(depthStr*10.0)/10.0;
+			depthStr = depthStr.toString();
+
+			if (feature.get('navlin_ty') >= 3 ||
+				feature.get('tila') > 5) {
+				// kaarre tai poistettu
+				return new ol.style.Style({
+					stroke: new ol.style.Stroke({ color: 'rgba(0,0,0,0.0)' })
+				});
+			}
+
+			if (feature.getGeometry().getLength() > 1852.0/2.0 &&
+				Number.isFinite(feature.get('suunta')) &&
+				feature.get('navlin_ty') <= 2) {
+				textStyle = new ol.style.Text({
+					font: '11px sans-serif',
+					text: Math.round(feature.get('tosisuunta')).pad(3) + "/" + depthStr,
+					rotation: Math.PI*((feature.get('tosisuunta')%180-90.0))/180.0,
+					textBaseline: 'bottom'
+				});
+			} else if (feature.getGeometry().getLength() > 1852.0/4.0) {
+				textStyle = new ol.style.Text({
+					font: '11px sans-serif',
+					text: depthStr,
+					rotation: Math.PI*((feature.get('tosisuunta')%180-90.0))/180.0,
+					textBaseline: 'bottom'
+				});
+			}
+			return new ol.style.Style({
+				stroke: new ol.style.Stroke({
+					color: 'rgba(0,0,0,1.0)',
+					lineDash: [],
+					width: 0.5
+				}),
+				text: textStyle
+			});
+		},
+		zIndex: 6,
+		overlaps: true,
+		init: false
+	},
+	// LV AVOIN TURVALAITE
+	{	name: 'turvalaitteet',
+		enabled: true,
+		type: 'wfs',
+		allowVisibilityChange: true,
+		urlfncgen: generateMeriWFSUrlFnc,
+		ns: 'meri',
+		layername: 'turvalaitteet',
+		attribution: 'Liikennevirasto',
+		urlfnc: null,
+		olSource: null,
+		olLayer: null,
+		olStyle: function(feature, resolution) {
+			return new ol.style.Style({
+				image: new ol.style.Icon({
+					anchor: [0.5, 0.5],
+					scale: 1.2 / (resolution**0.7),
+					opacity: 0.8,
+					src: "img/" + featureToSymbolLabel(feature, "turvalaite") + ".png"
+				})
+			});
+		},
+		zIndex: 7,
+		overlaps: false,
+		init: false
+	},
+//	// LV RAJOITETTU SYVYYSALUE
+//	{	name: 'syvyysalue',
+//		enabled: false,
+//		type: 'wfs',
+//		allowVisibilityChange: false,
+//		urlfncgen: generateLVUrlFnc,
+//		ns: 'rajoitettu',
+//		layername: 'syvyysalue_a',
+//		attribution: 'Liikennevirasto',
+//		urlfnc: null,
+//		olSource: null,
+//		olLayer: null,
+//		renderBuffer: 300,
+//		olStyle: function(feature, resolution) {
+//			var maxdepth = feature.get('MAXDEPTH');
+//			var mindepth = feature.get('MINDEPTH');
+//			var colour = 'rgba(0,0,0,1.0)';
+//
+//			if (mindepth < 10) {
+//				colour = 'rgba(228,241,251,1.0)';
+//			} else {
+//				colour = 'rgba(255,255,255,1.0)';
+//			}
+//
+//			return new ol.style.Style({
+//				geometry: feature.getGeometry(),
+//				fill: new ol.style.Fill({
+//					color: colour
+//				}),
+//				stroke: null
+//			});
+//		},
+//		zIndex: 1,
+//		overlaps: false,
+//		init: false
+//	},
+
+//	// LV RAJOITETTU SYVYYSALUE
+//	{	name: 'syvyysalue',
+//		enabled: false,
+//		type: 'wfs',
+//		allowVisibilityChange: false,
+//		urlfncgen: generateLVUrlFnc,
+//		ns: 'rajoitettu',
+//		layername: 'syvyysalue_a',
+//		attribution: 'Liikennevirasto',
+//		urlfnc: null,
+//		olSource: null,
+//		olLayer: null,
+//		renderBuffer: 300,
+//		olStyle: function(feature, resolution) {
+//			var maxdepth = feature.get('MAXDEPTH');
+//			var mindepth = feature.get('MINDEPTH');
+//			var colour = 'rgba(0,0,0,1.0)';
+//
+//			if (mindepth < 10) {
+//				colour = 'rgba(228,241,251,1.0)';
+//			} else {
+//				colour = 'rgba(255,255,255,1.0)';
+//			}
+//
+//			return new ol.style.Style({
+//				geometry: feature.getGeometry(),
+//				fill: new ol.style.Fill({
+//					color: colour
+//				}),
+//				stroke: null
+//			});
+//		},
+//		zIndex: 1,
+//		overlaps: false,
+//		init: false
+//	},
+//
+//	// LV RAJOITETTU SYVYYSKAYRA
+//	{	name: 'syvyyskayra',
+//		enabled: false,
+//		type: 'wfs',
+//		allowVisibilityChange: false,
+//		urlfncgen: generateLVUrlFnc,
+//		ns: 'rajoitettu',
+//		layername: 'syvyyskayra_v',
+//		attribution: 'Liikennevirasto',
+//		urlfnc: null,
+//		olSource: null,
+//		olLayer: null,
+//		renderBuffer: 300,
+//		olStyle: function(feature, resolution) {
+//			var depth = feature.get('VALDCO');
+//			var colour = 'rgba(0,0,0,0)';
+//			var linedash = null;
+//			var width = 1.0;
+//
+//			if (depth < 3.1 && depth > 2.9) {
+//				colour = 'rgba(185,195,203,1.0)';
+//				linedash = [2, 5];
+//				width = 2.0;
+//			} else if (depth < 6.1 && depth > 5.9) {
+//				colour = 'rgba(185,195,203,1.0)';
+//				linedash = [5, 5];
+//				width = 1.0;
+//			} else if (depth < 10.1 && depth > 9.9) {
+//				colour = 'rgba(185,195,203,0.5)';
+//				linedash = [1, 0];
+//				width = 0.5;
+//			} else if (depth < 20.1 && depth > 19.9) {
+//				colour = 'rgba(185,195,203,0.5)';
+//				linedash = [1, 0];
+//				width = 0.5;
+//			} else {
+//				colour = 'rgba(0,0,0,0)';
+//				linedash = null;
+//				width = 0.0;
+//			}
+//
+//			if (GLOBALOPTIONS.shallowWater > 0) {
+//				if (depth <= GLOBALOPTIONS.shallowWater) {
+//					colour = 'rgba(255,0,0,1.0)';
+//				}
+//			}
+//
+//			return new ol.style.Style({
+//				geometry: feature.getGeometry(),
+//				stroke: new ol.style.Stroke({
+//					color: colour,
+//					lineDash: linedash,
+//					width: width
+//				})
+//			});
+//		},
+//		overlaps: false,
+//		zIndex: 2,
+//		init: false
+//	},
+
+
+];
+
+
+var giveMeLayers = function(layers) {
+
+	// CREATE LAYERS OF THE LAYER STORAGE
+
+	var olLayers = [];
+
+	for (i = 0; i < layers.length; i++) {
+		if (!layers[i].enabled) { continue; }
+		if (layers[i].init) { continue; }
+		var renderBuffer = layers[i].renderBuffer || 100;
+		if (layers[i].type == 'wfs') {
+			var loadstrat = layers[i].loadingStrategy || ol.loadingstrategy.bbox;
+
+			layers[i].urlfnc = layers[i].urlfncgen(layers[i].ns, layers[i].layername, MAP_EPSG);
+			layers[i].olSource = new ol.source.Vector({
+				attributions: layers[i].attribution,
+				features: new ol.Collection(),
+				format: new ol.format.GeoJSON(),
+				url: layers[i].urlfnc,
+				strategy: loadstrat
+			});
+			layers[i].olLayer = new ol.layer.Vector({
+				source: layers[i].olSource,
+				style: layers[i].olStyle,
+				title: layers[i].name,
+				renderBuffer: renderBuffer
+			});
+			layers[i].init = true;
+			console.log("WFS Layer " + layers[i].name + " initialized");
+		} else if (layers[i].type == 'wkt') {
+			var format = new ol.format.WKT();
+			var features = format.readFeatures(layers[i].wkt, {
+				dataProjection: 'EPSG:' + layers[i].dataProjection,
+				featureProjection: 'EPSG:' + MAP_EPSG 
+			});
+			layers[i].olSource = new ol.source.Vector({
+				features: features
+			});
+			layers[i].olLayer = new ol.layer.Vector({
+				source: layers[i].olSource,
+				style: layers[i].olStyle,
+				title: layers[i].name,
+				renderBuffer: renderBuffer
+			});
+			layers[i].init = true;
+			console.log("WKT Layer " + layers[i].name + " initialized");
+		} else if (layers[i].type == 'geojson') {
+			var format = new ol.format.GeoJSON();
+			var features = format.readFeatures(layers[i].json, {
+				dataProjection: 'EPSG:' + layers[i].dataProjection,
+				featureProjection: 'EPSG:' + MAP_EPSG 
+			});
+			layers[i].olSource = new ol.source.Vector({
+				features: features
+			});
+			layers[i].olLayer = new ol.layer.Vector({
+				source: layers[i].olSource,
+				style: layers[i].olStyle,
+				title: layers[i].name,
+				renderBuffer: renderBuffer
+			});
+			layers[i].init = true;
+			console.log("GeoJSON Layer " + layers[i].name + " initialized");
+		} else if (layers[i].type == 'dyngeojson') {
+			layers[i].olSource = new ol.source.Vector({
+				features: layers[i].featurefnc()
+			});
+			layers[i].olLayer = new ol.layer.Vector({
+				source: layers[i].olSource,
+				style: layers[i].olStyle,
+				title: layers[i].name,
+				renderBuffer: renderBuffer
+			});
+			layers[i].init = false;
+			console.log("Dynamic GeoJSON Layer " + layers[i].name + " initialized");
+		} else if (layers[i].type == 'wms') {
+			layers[i].olSource = new ol.source.TileWMS({
+				url: layers[i].url,
+				attributions: layers[i].attribution,
+				params: {
+					'LAYERS': layers[i].layername,
+					'FORMAT': 'image/png'
+				},
+				serverType: 'geoserver',
+				crossOrigin: 'anonymous'
+			});
+			layers[i].olLayer = new ol.layer.Tile({
+				extent: layers[i].extent,
+				projection: layers[i].projection,
+				source: layers[i].olSource,
+				minResolution: layers[i].minResolution,
+				maxResolution: layers[i].maxResolution,
+				title: layers[i].name
+			});
+			layers[i].init = true;
+			console.log("WMS Layers " + layers[i].name + " initialized");
+		}
+		layers[i].olLayer.setZIndex(layers[i].zIndex);
+		layers[i].olLayer.set('allowVisibilityChange', layers[i].allowVisibilityChange);
+		olLayers.push(layers[i].olLayer);
+	}
+
+	return olLayers;
+};
+
+var findLayerInStorage = function(layerlist, layer) {
+	for (var i = 0; i < layerlist.length; i++) {
+		if (layer === layerlist[i].olLayer) {
+			return i;
+		}
+	}
+
+	throw ("findLayerInStorage(): not found");
+};
+
+var findLayerNameInStorage = function(layerlist, name) {
+	for (var i = 0; i < layerlist.length; i++) {
+		if (name == layerlist[i].name) {
+			return i;
+		}
+	}
+
+	throw ("findLayerNameInStorage(): not found");
+};
+
+</script>
+
+<div style="">
+	<div id="map" class="map" style="width: 80%; float: left;"></div>
+	<div id="infoField" style="width: 20%; float: right;"></div>
+</div>
+
+<script>
+
+var scaleLineControl = new ol.control.ScaleLine({
+	units: 'nautical',
+	minWidth: 128,
+});
+
+var mousePositionControl = new ol.control.MousePosition({
+	coordinateFormat: function(c) {
+		var NS, EW, latd, latm, lond, lonm;
+		if (c[0] < 0) { EW = 'W'; } else { EW = 'E'; }
+		if (c[1] < 0) { NS = 'S'; } else { NS = 'N'; }
+		lond = Math.floor(c[0]);
+		lonm = Math.round(100.0 * 60.0 * (c[0] - lond))/100.0;
+		latd = Math.floor(c[1]);
+		latm = Math.round(100.0 * 60.0 * (c[1] - latd))/100.0;
+		return latd.toString() + '&deg' + latm.toString() + "'" + NS + ' ' +
+			lond.toString() + '&deg' + lonm.toString() + "'" + EW;
+	},
+	projection: 'EPSG:4326',
+	undefinedHTML: '&nbsp;',
+	className: 'ol-mouse-position mousePositionControl'
+});
+
+var actionModeControl = function(opt_options) {
+	var options = opt_options || {};
+
+	if (!options.modes) { options.modes = ['1', '0']; }
+	if (!options.class) { options.class = ''; }
+
+	var button = document.createElement('button');
+
+	this.button_modes = options.modes;
+	this.button_modei = 0;
+	this.button = button;
+	button.innerHTML = this.button_modes[0];
+
+	var this_ = this;
+	var handleModeChange = function() {
+		this_.button_modei++;
+		if (this_.button_modei >= this_.button_modes.length) {
+			this_.button_modei = 0;
+		}
+		this_.button.innerHTML = this_.button_modes[this_.button_modei];
+		if (options.hasOwnProperty("onChangeFnc")) {
+			options.onChangeFnc(this_);
+		}
+	};
+
+	this.getMode = function() {
+		return this_.button_modes[this_.button_modei];
+	};
+
+	button.addEventListener('onload', handleModeChange, false);
+	button.addEventListener('click', handleModeChange, false);
+	button.addEventListener('touchstart', handleModeChange, false);
+
+	var element = document.createElement('div');
+	element.className = options.class + ' ol-unselectable ol-control';
+	element.appendChild(button);
+
+	ol.control.Control.call(this, {
+		element: element,
+		target: options.target
+	});
+};
+ol.inherits(actionModeControl, ol.control.Control);
+
+
+var generateGridSource = function(map) {
+	var i = findLayerNameInStorage(layers, "graticule");
+	layers[i].olSource = new ol.source.Vector({
+		features: layers[i].featurefnc(map)
+	});
+	layers[i].olLayer.setSource(layers[i].olSource);
+	layers[i].init = true;
+};
+
+var switchGrid = function(control) {
+	if (control.button_modes[control.button_modei] == 'G') {
+		var i = findLayerNameInStorage(layers, "graticule");
+		layers[i].olLayer.setVisible(true);
+		//drawGrid(map);
+	} else {
+		var i = findLayerNameInStorage(layers, "graticule");
+		layers[i].olLayer.setVisible(false);
+	}
+};
+
+var switchInteractionMode = function(control) {
+	return;
+};
+
+var interactionModeControlButton = new actionModeControl({
+	modes: ['i'],
+	class: 'interactionModeControlButton',
+	onChangeFnc: switchInteractionMode
+});
+
+//var gridEnabledControlButton = new actionModeControl({
+//	modes: ['G', 'g'],
+//	class: 'gridEnabledControlButton',
+//	onChangeFnc: switchGrid
+//});
+
+var switchShallowWater = function(control) {
+	if (control.button_modes[control.button_modei] == '3') {
+		GLOBALOPTIONS.shallowWater = 3;
+	} else if (control.button_modes[control.button_modei] == '6') {
+		GLOBALOPTIONS.shallowWater = 6;
+	} else if (control.button_modes[control.button_modei] == '10') {
+		GLOBALOPTIONS.shallowWater = 10;
+	} else {
+		GLOBALOPTIONS.shallowWater = 0;
+	}
+	var i = findLayerNameInStorage(layers, 'syvyyskayra');
+	layers[i].olLayer.setStyle(layers[i].olStyle);
+	layers[i].olLayer.changed();
+};
+
+//var shallowDepthControlButton = new actionModeControl({
+//	modes: ['0', '3', '6', '10'],
+//	class: 'shallowDepthControlButton',
+//	onChangeFnc: switchShallowWater
+//});
+
+var layerSwitcher = new ol.control.LayerSwitcher({
+	
+});
+
+var myLayers = giveMeLayers(layers);
+
+var map = new ol.Map({
+	layers: myLayers,
+	target: document.getElementById('map'),
+	view: new ol.View({
+		projection: 'EPSG:' + MAP_EPSG,
+		center: ol.proj.transform([25.1, 60.2], 'EPSG:4326', 'EPSG:' + MAP_EPSG),
+		maxZoom: 16,
+		minZoom: 13,
+		zoom: 15
+	}),
+	controls: ol.control.defaults({
+	}).extend([
+		scaleLineControl,
+		mousePositionControl,
+//		shallowDepthControlButton,
+//		gridEnabledControlButton,
+		interactionModeControlButton,
+		layerSwitcher
+	])
+});
+
+generateGridSource(map);
+layerSwitcher.showPanel();
+
+/*layers[findLayerNameInStorage(layers, "graticule")].olLayer.on("render", function(e) {
+	generateGridSource(map);
+}, layers[findLayerNameInStorage(layers, "graticule")]);*/
+
+map.on("moveend", function(e) {
+	generateGridSource(map);
+}, layers[findLayerNameInStorage(layers, "graticule")]);
+
+//map.on("moveend", function(e) {
+//	if (gridEnabledControlButton.button_modes[gridEnabledControlButton.button_modei] == 'G') {
+//		drawGrid(map);
+//	}
+//});
+
+map.on("click", function(e) {
+	map.getOverlays().clear();
+	if (interactionModeControlButton.getMode() == 'i') {
+		var hasFeature = false;
+		var data = [];
+		map.forEachFeatureAtPixel(e.pixel, function(feature, layer) {
+			var i = findLayerInStorage(layers, layer);
+			if (layers[i].name == "background" || layers[i].name == "graticule") { return; }
+			hasFeature = true;
+			data.push({ name: layers[i].name, properties: {} });
+			var keys = feature.getKeys();
+			for (var j = 0; j < keys.length; j++) {
+				if (keys[j] == "geometry") { continue; }
+				data[data.length-1].properties[keys[j]] = feature.getProperties()[keys[j]];
+			}
+		});
+		if (!hasFeature) return;
+		var el = featureInfoToHTML(data);
+		//var el = document.createElement('div');
+		el.className = 'infoOverlay';
+		var this_ = this;
+		//el.addEventListener("mouseout", function() {
+		//	for (var i = 0; i < this_.getOverlays().getLength(); i++) {
+		//		if (this == this_.getOverlays().item(i).getElement()) {
+		//			this_.getOverlays().removeAt(i);
+		//		}
+		//	}
+		//});
+		//el.innerHTML = JSON.stringify(data, null, 2);
+		var popup = new ol.Overlay({
+			id: "featureInfo",
+			element: el,
+			autoPan: true
+		});
+		this.addOverlay(popup);
+		popup.setPosition(this.getCoordinateFromPixel(e.pixel));
+	} 
+});
+
+</script>
+
+</body>
+</html>

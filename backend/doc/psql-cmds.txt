@@ -1,0 +1,7 @@
+$ createuser --interactive   # create user 'meri'                               
+$ createdb meri                                                                 
+postgres=# alter database meri owner to meri;                                   
+postgres=# alter user meri with password 'mypassword';                          
+                                                                                
+With db 'meri':                                                                 
+postgres=# create extension postgis;                                            

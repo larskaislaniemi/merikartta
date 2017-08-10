@@ -1,0 +1,2 @@
+LV_rajoitettu_syvyyspiste_p.xml https://extranet.liikennevirasto.fi/inspirepalvelu/rajoitettu/wfs?SERVICE=WFS&VERSION=1.0.0&REQUEST=GetFeature&TYPENAME=rajoitettu:syvyyspiste_p&SRSNAME=EPSG:3067 syvyyspiste
+

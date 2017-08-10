@@ -1,0 +1,2 @@
+LV_rajoitettu_syvyyskayra_v.xml https://extranet.liikennevirasto.fi/inspirepalvelu/rajoitettu/wfs?SERVICE=WFS&VERSION=1.0.0&REQUEST=GetFeature&TYPENAME=rajoitettu:syvyyskayra_v&SRSNAME=EPSG:3067 syvyyskayra
+

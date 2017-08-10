@@ -1,0 +1,124 @@
+<!DOCTYPE Map [
+
+<!-- CONFIG HERE -->
+<!ENTITY db_type "postgis">
+<!ENTITY db_host "localhost">
+<!ENTITY db_user "meri">
+<!ENTITY db_password "Kissa123">
+<!ENTITY db_dbname "meri">
+<!ENTITY db_geom_field "wkb_geometry">
+<!-- CONFIG STOPS HERE -->
+
+
+<!-- STYLE DEFINITIONS -->
+<!ENTITY st_col_shallow "#E4F1FB">
+<!ENTITY st_col_deep "#FFFFFF">
+<!ENTITY st_col_depthcontour "#08A6E8">
+<!ENTITY st_col_bg "&st_col_land;"> 
+<!ENTITY st_col_land "#F9EFCA">
+<!ENTITY st_col_annotation "#9E368B">
+<!ENTITY st_col_shiplane "&st_col_annotation;">
+<!ENTITY st_opa_shiplane "0.1">
+<!-- -->
+
+
+<!ENTITY db_definition_inc SYSTEM "db_definition.xml.inc">
+
+]>
+
+<Map background-color="&st_col_bg;" srs="+proj=utm +zone=35 +ellps=GRS80 +units=m +no_defs">
+
+  <FontSet name="mapfonts">
+    <Font face-name="DejaVu Sans Book"/>
+  </FontSet>
+
+  <FontSet name="mapfonts_i">
+    <Font face-name="DejaVu Sans Oblique"/>
+  </FontSet>
+
+  <!-- MAA-ALUE -->
+
+  <Style name="styleMaaalue" filter-mode="first">
+    <Rule>
+      <LineSymbolizer stroke-width="1.0" stroke="#000000"/> 
+    </Rule>
+  </Style>
+  <Layer name="layerMaaalue" srs="+proj=utm +zone=35 +ellps=GRS80 +units=m +no_defs ">
+    <StyleName>styleMaaalue</StyleName>
+    <Datasource>
+      &db_definition_inc;
+      <Parameter name="table">
+        (
+          SELECT ST_Collect(wkb_geometry) AS wkb_geometry FROM syvyysalue WHERE ST_Intersects(wkb_geometry, !bbox!) = 't'
+        ) 
+        AS data
+      </Parameter>
+    </Datasource>
+  </Layer>
+
+  <!-- SYVYYSALUE -->
+
+  <Style name="styleSyvyysalue" filter-mode="first">
+    <Rule>
+      <Filter>[mindepth] &lt;= 0</Filter>
+      <PolygonSymbolizer fill="&st_col_shallow;" gamma="0.5"/>
+      <LineSymbolizer stroke-width="0"/>
+    </Rule>
+
+    <Rule>
+      <Filter>[mindepth] &lt; 10</Filter>
+      <PolygonSymbolizer fill="&st_col_shallow;" gamma="0.5"/>
+      <LineSymbolizer stroke-width="0"/>
+    </Rule>
+
+    <Rule>
+      <Filter>[mindepth] &lt; 20</Filter>
+      <PolygonSymbolizer fill="&st_col_deep;" gamma="0.5"/>
+      <LineSymbolizer stroke-width="0"/>
+    </Rule>
+
+    <Rule>
+      <Filter>[mindepth] &gt;= 20</Filter>
+      <PolygonSymbolizer fill="&st_col_deep;" gamma="0.5"/>
+      <LineSymbolizer stroke-width="0"/>
+    </Rule>
+  </Style>
+
+  <Layer name="layerSyvyysalue" srs="+proj=utm +zone=35 +ellps=GRS80 +units=m +no_defs ">
+    <StyleName>styleSyvyysalue</StyleName>
+    <Datasource>
+      &db_definition_inc;
+      <Parameter name="table">syvyysalue</Parameter>
+    </Datasource>
+  </Layer>
+
+  <!-- SYVYYSKÄYRÄ -->
+
+  <Style name="styleSyvyyskayra" filter-mode="first">
+    <Rule>
+      <Filter>[valdco] = 3.0</Filter>
+      <LineSymbolizer stroke-width="0.5" stroke="&st_col_depthcontour;" stroke-dasharray="2,4"/>
+    </Rule>
+    <Rule>
+      <Filter>[valdco] = 6.0</Filter>
+      <LineSymbolizer stroke-width="0.5" stroke="&st_col_depthcontour;" stroke-dasharray="5,2"/>
+    </Rule>
+    <Rule>
+      <Filter>[valdco] = 10.0</Filter>
+      <LineSymbolizer stroke-width="0.5" stroke="&st_col_depthcontour;"/>
+    </Rule>
+    <Rule>
+      <Filter>[valdco] = 20.0</Filter>
+      <LineSymbolizer stroke-width="0.5" stroke="&st_col_depthcontour;"/>
+    </Rule>
+  </Style>
+
+  <Layer name="layerSyvyyskayra" srs="+proj=utm +zone=35 +ellps=GRS80 +units=m +no_defs ">
+    <StyleName>styleSyvyyskayra</StyleName>
+    <Datasource>
+      &db_definition_inc;
+      <Parameter name="table">(SELECT * FROM syvyyskayra WHERE valdco IN (3, 6, 10, 20)) AS data</Parameter>
+    </Datasource>
+  </Layer>
+
+</Map>

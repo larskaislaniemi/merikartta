@@ -1,0 +1,2 @@
+LV_rajoitettu_syvyysalue_a.xml https://extranet.liikennevirasto.fi/inspirepalvelu/rajoitettu/wfs?SERVICE=WFS&VERSION=1.0.0&REQUEST=GetFeature&TYPENAME=rajoitettu:syvyysalue_a&SRSNAME=EPSG:3067 syvyysalue
+
