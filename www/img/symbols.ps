@@ -50,23 +50,33 @@
 
 } def
 
+/mk_downTriangleSmallSymbol {
+	newpath
+	moveto
+	3 um	60 sin 6 um mul	rlineto
+	-6 um	0	rlineto
+	3 um	60 sin -6 um mul	rlineto
+	closepath
+} def
+
 /mk_upTriangleSmallSymbol {
 	newpath
 	moveto
-	4 um	0	rlineto
-	-4 um	60 sin  8 um mul	rlineto
-	-4 um	60 sin -8 um mul	rlineto
-	4 um	0	rlineto
+	3 um	0	rlineto
+	-3 um	60 sin  6 um mul	rlineto
+	-3 um	60 sin -6 um mul	rlineto
+	3 um	0	rlineto
 	closepath
 } def
 
 /mk_rectSmallSymbol {
+	1.0 um setlinewidth
 	newpath
 	moveto
 	3 um	0	rlineto
-	0	8 um	rlineto
+	0	6 um	rlineto
 	-6 um	0	rlineto
-	0 	-8 um	rlineto
+	0 	-6 um	rlineto
 	3 um	0	rlineto
 	closepath
 } def
@@ -91,18 +101,39 @@
 } def
 
 /mk_circleSymbol {
-	1.25 um	setlinewidth
+	1.0 um	setlinewidth
 	newpath
 	5 um add % add to y coord
 			5 um	0	360	arc
 	closepath
 } def
 
-/mk_poleSymbol {
-	1.25 um	setlinewidth
+/mk_buoySymbol {
+	2 um	setlinewidth
 	newpath
 	moveto
-	0 um	5 um	rlineto
+	2 um	0 um	rlineto
+	-1 um	6 um	rlineto
+	-2 um	0 um	rlineto
+	-1 um	-6 um	rlineto
+	2 um	0 um	rlineto
+	%0 um	6 um	rlineto
+	closepath
+} def
+
+/mk_fixedPoleSymbol {
+	3 um	setlinewidth
+	newpath
+	moveto
+	0 um	6 um	rlineto
+	closepath
+} def
+
+/mk_poleSymbol {
+	0.75 um	setlinewidth
+	newpath
+	moveto
+	0 um	8 um	rlineto
 	closepath
 } def
 
@@ -121,19 +152,31 @@
 } def
 
 /mk_triangleHeight {
-	60 sin 10 um mul 0.3 um add
+	60 sin 10 um mul %0.3 um add
+} def
+
+/mk_triangleSmallHeight {
+	60 sin 6 um mul %0.3 um add
 } def
 
 /mk_circleHeight {
-	10 um 0.3 um add
+	10 um %0.3 um add
 } def
 
 /mk_poleHeight {
-	5 um 0.3 um add
+	8 um %0.3 um add
+} def
+
+/mk_buoyHeight {
+	6 um %0.3 um add
+} def
+
+/mk_fixedPoleHeight {
+	6 um %0.3 um add
 } def
 
 /mk_crossHeight {
-	10 um 0.3 um add
+	10 um %0.3 um add
 } def
 
 /mk_symbolName (noSymbol) def
@@ -164,83 +207,95 @@ stroke
 /mk_symClass {MKSymbol 10000 div cvi 100 mod} def
 
 mk_symClass 10 eq mk_symClass 9 eq mk_symClass 7 eq or or {
+	% 10 - viitta; 9 - poiju; 7 - reunamerkki
 	MKSymbol 2 mod 0 eq { /mk_matrix mk_matrixNorm def } { /mk_matrix mk_matrixSkew def } ifelse
 
-	mk_symType 1 ge mk_symType 9 le and {
+	%
+	% Base
+	%
+	mk_symClass 10 eq {
+		% draw base for spar buoy
+		/mk_symbolHeight {mk_poleHeight} def
+		/mk_symbolLower {mk_poleSymbol stroke} def
+	} if
+
+	mk_symClass 9 eq {
+		% draw base for spindle/ice buoy
+		/mk_symbolHeight {mk_buoyHeight 1 um add} def
+		/mk_symbolLower {mk_buoySymbol fill} def
+	} if
+
+	mk_symClass 7 eq {
+		% draw base for fairway side mark
+		/mk_symbolHeight {mk_fixedPoleHeight 1 um add} def
+		/mk_symbolLower {mk_fixedPoleSymbol stroke} def
+	} if
+
+	% 
+	% Sign
+	%
+	mk_symType 1 ge mk_symType 6 le and {
 		/mk_symbolName (unknown 7-9-10 / 3..6) def
-		
+
 		mk_symType 1 eq {
-			/mk_symbolName (green) def
-			/mk_symbolHeight {mk_poleHeight} def
-			/mk_cardinalLower {mk_poleSymbol stroke} def
-			/mk_cardinalUpper {mk_upTriangleSmallSymbol fill} def
+			% green
+			/mk_symbolUpper {mk_upTriangleSmallSymbol fill} def
 		} if
 
 		mk_symType 2 eq {
-			/mk_symbolName (red) def
-			/mk_symbolHeight {mk_poleHeight} def
-			/mk_cardinalLower {mk_poleSymbol stroke} def
-			/mk_cardinalUpper {mk_rectSmallSymbol stroke} def
+			% red
+			/mk_symbolUpper {mk_rectSmallSymbol stroke} def
 		} if
 
 		mk_symType 3 eq {
-			/mk_symbolName (north) def
-			/mk_symbolHeight {mk_triangleHeight} def
-			/mk_cardinalLower {mk_upTriangleSymbol fill} def
-			/mk_cardinalUpper {mk_upTriangleSymbol fill} def
+			% north
+			/mk_symbolUpper {
+				2 copy
+				mk_upTriangleSmallSymbol fill
+				mk_triangleSmallHeight add
+				mk_upTriangleSmallSymbol fill
+			} def
 		} if
 
 		mk_symType 4 eq {
-			/mk_symbolName (south) def
-			/mk_symbolHeight {mk_triangleHeight} def
-			/mk_cardinalLower {mk_downTriangleSymbol fill} def
-			/mk_cardinalUpper {mk_downTriangleSymbol fill} def
+			% south
+			/mk_symbolUpper { 
+				2 copy
+				mk_downTriangleSmallSymbol fill
+				mk_triangleSmallHeight add
+				mk_downTriangleSmallSymbol fill
+			} def
 		} if
 
 		mk_symType 5 eq {
-			/mk_symbolName (east) def
-			/mk_symbolHeight {mk_triangleHeight} def
-			/mk_cardinalLower {mk_upTriangleSymbol fill} def
-			/mk_cardinalUpper {mk_downTriangleSymbol fill} def
+			% west
+			/mk_symbolUpper { 
+				2 copy
+				mk_downTriangleSmallSymbol fill
+				mk_triangleSmallHeight 0.6 um add add
+				mk_upTriangleSmallSymbol fill
+			} def
 		} if
 
 		mk_symType 6 eq {
-			/mk_symbolName (west) def
-			/mk_symbolHeight {mk_triangleHeight} def
-			/mk_cardinalLower {mk_downTriangleSymbol fill} def
-			/mk_cardinalUpper {mk_upTriangleSymbol fill} def
-		} if
-		
-		mk_symType 7 eq {
-			/mk_symbolName (danger) def
-			/mk_symbolHeight {mk_circleHeight} def
-			/mk_cardinalLower {mk_circleSymbol fill} def
-			/mk_cardinalUpper {mk_circleSymbol fill} def
-		} if
-
-		mk_symType 8 eq {
-			/mk_symbolName (safe) def
-			/mk_symbolHeight {mk_poleHeight} def
-			/mk_cardinalLower {mk_poleSymbol stroke} def
-			/mk_cardinalUpper {mk_circleSymbol stroke} def
-		} if
-
-		mk_symType 9 eq {
-			/mk_symbolName (special) def
-			/mk_symbolHeight {mk_poleHeight} def
-			/mk_cardinalLower {mk_poleSymbol stroke} def
-			/mk_cardinalUpper {mk_crossSymbol stroke} def
+			% east 
+			/mk_symbolUpper { 
+				2 copy
+				mk_upTriangleSmallSymbol fill
+				mk_triangleSmallHeight add
+				mk_downTriangleSmallSymbol fill
+			} def
 		} if
 
 		gsave
 		mk_matrix concat
 		% draw lower symbol
 		mk_colBase	setrgbcolor
-		0 rmp	0 rmp	mk_cardinalLower
+		0 rmp	0 rmp	mk_symbolLower
 
-		% draw second triangle
+		% draw upper symbol
 		mk_colBase	setrgbcolor
-		0 rmp	0 rmp mk_symbolHeight add mk_cardinalUpper 
+		0 rmp	0 rmp mk_symbolHeight add mk_symbolUpper 
 		grestore
 	}
 	{
